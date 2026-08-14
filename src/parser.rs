@@ -3,7 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 use crate::cow_rc_str::CowRcStr;
-use crate::tokenizer::{SourceLocation, SourcePosition, Token, Tokenizer};
+use crate::tokenizer::{
+    SourceLocation, SourcePosition, Token, Tokenizer, UrlErrorRecovery,
+};
 use smallvec::SmallVec;
 use std::fmt;
 use std::ops::BitOr;
@@ -243,6 +245,17 @@ impl<'i> ParserInput<'i> {
     pub fn new(input: &'i str) -> ParserInput<'i> {
         ParserInput {
             tokenizer: Tokenizer::new(input),
+            cached_token: None,
+        }
+    }
+
+    /// Create a parser input with an explicit malformed-URL recovery standard.
+    pub fn new_with_url_error_recovery(
+        input: &'i str,
+        url_error_recovery: UrlErrorRecovery,
+    ) -> ParserInput<'i> {
+        ParserInput {
+            tokenizer: Tokenizer::new_with_url_error_recovery(input, url_error_recovery),
             cached_token: None,
         }
     }

@@ -10,6 +10,17 @@ use crate::parser::{ArbitrarySubstitutionFunctions, ParserState};
 use std::char;
 use std::ops::Range;
 
+/// Selects the standards-defined recovery topology for malformed `url()`
+/// tokens.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum UrlErrorRecovery {
+    /// Consume a CSS Syntax Level 3 `<bad-url-token>` through its closing `)`.
+    #[default]
+    CssSyntax3,
+    /// Preserve CSS 2.1 component values for `BAD_URI` / `BAD_STRING` recovery.
+    Css2,
+}
+
 #[cfg(not(feature = "dummy_match_byte"))]
 use cssparser_macros::match_byte;
 
@@ -218,6 +229,7 @@ pub struct Tokenizer<'a> {
     arbitrary_substitution_functions: SeenStatus<'a>,
     source_map_url: Option<&'a str>,
     source_url: Option<&'a str>,
+    url_error_recovery: UrlErrorRecovery,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -230,6 +242,14 @@ enum SeenStatus<'a> {
 impl<'a> Tokenizer<'a> {
     #[inline]
     pub fn new(input: &'a str) -> Self {
+        Self::new_with_url_error_recovery(input, UrlErrorRecovery::CssSyntax3)
+    }
+
+    #[inline]
+    pub(crate) fn new_with_url_error_recovery(
+        input: &'a str,
+        url_error_recovery: UrlErrorRecovery,
+    ) -> Self {
         Tokenizer {
             input,
             position: 0,
@@ -238,6 +258,7 @@ impl<'a> Tokenizer<'a> {
             arbitrary_substitution_functions: SeenStatus::DontCare,
             source_map_url: None,
             source_url: None,
+            url_error_recovery,
         }
     }
 
@@ -917,7 +938,16 @@ fn consume_ident_like<'a>(tokenizer: &mut Tokenizer<'a>) -> Token<'a> {
     if !tokenizer.is_eof() && tokenizer.next_byte_unchecked() == b'(' {
         tokenizer.advance(1);
         if value.eq_ignore_ascii_case("url") {
-            consume_unquoted_url(tokenizer).unwrap_or(Function(value))
+            let css2_start = (tokenizer.url_error_recovery == UrlErrorRecovery::Css2)
+                .then(|| tokenizer.state());
+            let token = consume_unquoted_url(tokenizer).unwrap_or(Function(value.clone()));
+            if matches!(token, BadUrl(_)) {
+                if let Some(start) = css2_start {
+                    tokenizer.reset(&start);
+                    return Function(value);
+                }
+            }
+            token
         } else {
             tokenizer.see_function(&value);
             Function(value)

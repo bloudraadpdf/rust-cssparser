@@ -269,6 +269,52 @@ fn expect_no_error_token() {
     assert!(Parser::new(&mut input).expect_no_error_token().is_err());
 }
 
+#[test]
+fn css2_malformed_url_preserves_component_value_topology() {
+    for css in [
+        "url(foo\"bar) }\n#three { background-color: red; }",
+        "url(foo\"bar) }\n) }\n#four { background-color: green; }",
+        "url(}{\"\"{)}); background-color: green; }",
+        "url(() }\n#fourteen { background-color: red; }",
+    ] {
+        let mut input = ParserInput::new_with_url_error_recovery(
+            css,
+            crate::UrlErrorRecovery::Css2,
+        );
+        let mut parser = Parser::new(&mut input);
+        assert_eq!(
+            parser.next_including_whitespace_and_comments(),
+            Ok(&Token::Function("url".into())),
+            "CSS 2 recovery must retain the url( function boundary for {css:?}",
+        );
+    }
+}
+
+#[test]
+fn css_syntax_3_malformed_url_still_emits_bad_url() {
+    let mut input = ParserInput::new("url(foo\"bar)");
+    let mut parser = Parser::new(&mut input);
+    assert!(matches!(
+        parser.next_including_whitespace_and_comments(),
+        Ok(Token::BadUrl(_))
+    ));
+}
+
+#[test]
+fn url_error_recovery_modes_tokenize_valid_urls_identically() {
+    for recovery in [
+        crate::UrlErrorRecovery::CssSyntax3,
+        crate::UrlErrorRecovery::Css2,
+    ] {
+        let mut input = ParserInput::new_with_url_error_recovery("url(example.png)", recovery);
+        let mut parser = Parser::new(&mut input);
+        assert_eq!(
+            parser.next_including_whitespace_and_comments(),
+            Ok(&Token::UnquotedUrl("example.png".into())),
+        );
+    }
+}
+
 /// https://github.com/servo/rust-cssparser/issues/71
 #[test]
 fn outer_block_end_consumed() {

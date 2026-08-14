@@ -8,6 +8,15 @@ rust-cssparser
 Rust implementation of
 [CSS Syntax Module Level 3](https://drafts.csswg.org/css-syntax/)
 
+Browser stylesheet parsers also need the compatible malformed-URL recovery
+defined by CSS 2.1. A quote encountered after an unquoted URL prefix must leave
+the `url(` function's component-value topology visible so that `BAD_STRING`
+and matched-pair recovery determine where the surrounding declaration and rule
+end. `ParserInput` therefore exposes a typed URL-error recovery choice: the
+CSS Syntax Level 3 default consumes a `<bad-url-token>` through `)`, while the
+CSS 2 mode preserves legacy component topology. Valid URLs tokenize identically
+in both modes.
+
 
 Overview
 --------

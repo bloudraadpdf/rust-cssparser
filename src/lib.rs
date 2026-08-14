@@ -82,7 +82,7 @@ pub use crate::rules_and_declarations::{AtRuleParser, QualifiedRuleParser};
 pub use crate::rules_and_declarations::{DeclarationParser, RuleBodyItemParser, RuleBodyParser};
 pub use crate::serializer::{serialize_identifier, serialize_name, serialize_string};
 pub use crate::serializer::{CssStringWriter, ToCss, TokenSerializationType};
-pub use crate::tokenizer::{SourceLocation, SourcePosition, Token};
+pub use crate::tokenizer::{SourceLocation, SourcePosition, Token, UrlErrorRecovery};
 pub use crate::unicode_range::UnicodeRange;
 pub use cssparser_macros::*;
 #[doc(hidden)]
