@@ -941,11 +941,11 @@ fn consume_ident_like<'a>(tokenizer: &mut Tokenizer<'a>) -> Token<'a> {
             let css2_start = (tokenizer.url_error_recovery == UrlErrorRecovery::Css2)
                 .then(|| tokenizer.state());
             let token = consume_unquoted_url(tokenizer).unwrap_or(Function(value.clone()));
-            if matches!(token, BadUrl(_)) {
-                if let Some(start) = css2_start {
-                    tokenizer.reset(&start);
-                    return Function(value);
-                }
+            if let Some(start) =
+                css2_start.filter(|_| matches!(&token, BadUrl(contents) if contents.is_empty()))
+            {
+                tokenizer.reset(&start);
+                return Function(value);
             }
             token
         } else {
@@ -1249,6 +1249,9 @@ fn consume_unquoted_url<'a>(tokenizer: &mut Tokenizer<'a>) -> Result<Token<'a>, 
                 }
                 b'\x01'..=b'\x08' | b'\x0B' | b'\x0E'..=b'\x1F' | b'\x7F'  // non-printable
                     | b'"' | b'\'' | b'(' => {
+                    if let Some(token) = css2_bad_url_prefix(tokenizer, start_pos) {
+                        return token
+                    }
                     tokenizer.advance(1);
                     return consume_bad_url(tokenizer, start_pos)
                 },
@@ -1283,6 +1286,9 @@ fn consume_unquoted_url<'a>(tokenizer: &mut Tokenizer<'a>) -> Result<Token<'a>, 
                 }
                 b'\x01'..=b'\x08' | b'\x0B' | b'\x0E'..=b'\x1F' | b'\x7F'  // non-printable
                     | b'"' | b'\'' | b'(' => {
+                    if let Some(token) = css2_bad_url_prefix(tokenizer, start_pos) {
+                        return token
+                    }
                     tokenizer.advance(1);
                     return consume_bad_url(tokenizer, start_pos);
                 }
@@ -1342,6 +1348,9 @@ fn consume_unquoted_url<'a>(tokenizer: &mut Tokenizer<'a>) -> Result<Token<'a>, 
                     tokenizer.consume_newline();
                 }
                 b => {
+                    if let Some(token) = css2_bad_url_prefix(tokenizer, start_pos) {
+                        return token
+                    }
                     tokenizer.consume_known_byte(b);
                     return consume_bad_url(tokenizer, start_pos);
                 }
@@ -1374,6 +1383,14 @@ fn consume_unquoted_url<'a>(tokenizer: &mut Tokenizer<'a>) -> Result<Token<'a>, 
             }
         }
         BadUrl(tokenizer.slice_from(start_pos).into())
+    }
+
+    fn css2_bad_url_prefix<'a>(
+        tokenizer: &Tokenizer<'a>,
+        start_pos: SourcePosition,
+    ) -> Option<Token<'a>> {
+        (tokenizer.url_error_recovery == UrlErrorRecovery::Css2)
+            .then(|| BadUrl(tokenizer.slice_from(start_pos).into()))
     }
 }
 

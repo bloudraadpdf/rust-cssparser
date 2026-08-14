@@ -271,11 +271,23 @@ fn expect_no_error_token() {
 
 #[test]
 fn css2_malformed_url_preserves_component_value_topology() {
-    for css in [
-        "url(foo\"bar) }\n#three { background-color: red; }",
-        "url(foo\"bar) }\n) }\n#four { background-color: green; }",
-        "url(}{\"\"{)}); background-color: green; }",
-        "url(() }\n#fourteen { background-color: red; }",
+    for (css, expected) in [
+        (
+            "url(foo\"bar) }\n#three { background-color: red; }",
+            Token::BadUrl("foo".into()),
+        ),
+        (
+            "url(foo\"bar) }\n) }\n#four { background-color: green; }",
+            Token::BadUrl("foo".into()),
+        ),
+        (
+            "url(}{\"\"{)}); background-color: green; }",
+            Token::BadUrl("}{".into()),
+        ),
+        (
+            "url(() }\n#fourteen { background-color: red; }",
+            Token::Function("url".into()),
+        ),
     ] {
         let mut input = ParserInput::new_with_url_error_recovery(
             css,
@@ -284,8 +296,8 @@ fn css2_malformed_url_preserves_component_value_topology() {
         let mut parser = Parser::new(&mut input);
         assert_eq!(
             parser.next_including_whitespace_and_comments(),
-            Ok(&Token::Function("url".into())),
-            "CSS 2 recovery must retain the url( function boundary for {css:?}",
+            Ok(&expected),
+            "CSS 2 recovery must retain the BAD_URI / function boundary for {css:?}",
         );
     }
 }
