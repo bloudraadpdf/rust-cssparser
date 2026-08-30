@@ -6,6 +6,7 @@
 
 use crate::tokenizer::Token;
 use crate::{BasicParseError, Parser, ToCss};
+use std::borrow::Cow;
 use std::char;
 use std::fmt;
 
@@ -37,12 +38,10 @@ impl UnicodeRange {
         let after_u = input.position();
         parse_tokens(input)?;
 
-        // This deviates from the spec in case there are CSS comments
-        // between tokens in the middle of one <unicode-range>,
-        // but oh well…
         let concatenated_tokens = input.slice_from(after_u);
+        let commentless_tokens = discard_comments(concatenated_tokens.as_bytes());
 
-        let range = match parse_concatenated(concatenated_tokens.as_bytes()) {
+        let range = match parse_concatenated(&commentless_tokens) {
             Ok(range) => range,
             Err(()) => {
                 return Err(input
@@ -55,6 +54,34 @@ impl UnicodeRange {
             Ok(range)
         }
     }
+}
+
+/// CSS Syntax discards comments as if they did not exist. The tokenizer has
+/// already validated and skipped them while consuming the `<urange>` tokens;
+/// remove the same byte spans before decoding the consumed source slice.
+fn discard_comments(input: &[u8]) -> Cow<'_, [u8]> {
+    let Some(first_comment) = input.windows(2).position(|window| window == b"/*") else {
+        return Cow::Borrowed(input);
+    };
+    let mut output = Vec::with_capacity(input.len());
+    output.extend_from_slice(&input[..first_comment]);
+    let mut cursor = first_comment;
+    while cursor < input.len() {
+        if input.get(cursor..cursor + 2) == Some(b"/*") {
+            cursor += 2;
+            let Some(end) = input[cursor..]
+                .windows(2)
+                .position(|window| window == b"*/")
+            else {
+                break;
+            };
+            cursor += end + 2;
+        } else {
+            output.push(input[cursor]);
+            cursor += 1;
+        }
+    }
+    Cow::Owned(output)
 }
 
 fn parse_tokens<'i>(input: &mut Parser<'i, '_>) -> Result<(), BasicParseError<'i>> {

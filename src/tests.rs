@@ -470,6 +470,25 @@ fn unicode_range() {
 }
 
 #[test]
+fn unicode_range_discards_comments_between_tokens() {
+    for (css, expected) in [
+        ("u/**/+/**/a/**/?", (0xA0, 0xAF)),
+        ("u/**/+0a/**/?", (0xA0, 0xAF)),
+        ("u/**/+0/**/?", (0, 0xF)),
+        ("u/**/+0/**/-0a", (0, 0xA)),
+        ("u/**/+0/**/-1", (0, 1)),
+        ("u/**/+/**/?", (0, 0xF)),
+    ] {
+        let mut input = ParserInput::new(css);
+        let mut parser = Parser::new(&mut input);
+        let range = UnicodeRange::parse(&mut parser)
+            .expect("comments are discarded before parsing a urange");
+        assert!(parser.is_exhausted(), "{}", css);
+        assert_eq!((range.start, range.end), expected, "{}", css);
+    }
+}
+
+#[test]
 fn serializer_not_preserving_comments() {
     serializer(false)
 }
