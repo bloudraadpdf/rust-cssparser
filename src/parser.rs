@@ -76,7 +76,12 @@ pub enum BasicParseErrorKind<'i> {
     AtRuleBodyInvalid,
     /// A qualified rule was encountered that was invalid.
     QualifiedRuleInvalid,
+    /// A block or function was nested deeper than [`MAX_NESTING_DEPTH`].
+    NestingTooDeep,
 }
+
+/// The deepest nesting of blocks and functions that a parser enters.
+pub const MAX_NESTING_DEPTH: usize = 128;
 
 impl fmt::Display for BasicParseErrorKind<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -91,6 +96,9 @@ impl fmt::Display for BasicParseErrorKind<'_> {
             BasicParseErrorKind::AtRuleBodyInvalid => write!(f, "invalid @ rule body encountered"),
             BasicParseErrorKind::QualifiedRuleInvalid => {
                 write!(f, "invalid qualified rule encountered")
+            }
+            BasicParseErrorKind::NestingTooDeep => {
+                write!(f, "blocks nested deeper than {MAX_NESTING_DEPTH}")
             }
         }
     }
@@ -232,6 +240,7 @@ impl<E: fmt::Display + fmt::Debug> std::error::Error for ParseError<'_, E> {}
 pub struct ParserInput<'i> {
     tokenizer: Tokenizer<'i>,
     cached_token: Option<CachedToken<'i>>,
+    nesting_depth: usize,
 }
 
 struct CachedToken<'i> {
@@ -246,6 +255,7 @@ impl<'i> ParserInput<'i> {
         ParserInput {
             tokenizer: Tokenizer::new(input),
             cached_token: None,
+            nesting_depth: 0,
         }
     }
 
@@ -257,6 +267,7 @@ impl<'i> ParserInput<'i> {
         ParserInput {
             tokenizer: Tokenizer::new_with_url_error_recovery(input, url_error_recovery),
             cached_token: None,
+            nesting_depth: 0,
         }
     }
 
@@ -1153,6 +1164,12 @@ where
         BlockType::SquareBracket => ClosingDelimiter::CloseSquareBracket,
         BlockType::Parenthesis => ClosingDelimiter::CloseParenthesis,
     };
+    if parser.input.nesting_depth >= MAX_NESTING_DEPTH {
+        let error = parser.new_error(BasicParseErrorKind::NestingTooDeep);
+        consume_until_end_of_block(block_type, &mut parser.input.tokenizer);
+        return Err(error);
+    }
+    parser.input.nesting_depth += 1;
     let result;
     // Introduce a new scope to limit duration of nested_parser’s borrow
     {
@@ -1166,6 +1183,7 @@ where
             consume_until_end_of_block(block_type, &mut nested_parser.input.tokenizer);
         }
     }
+    parser.input.nesting_depth -= 1;
     consume_until_end_of_block(block_type, &mut parser.input.tokenizer);
     result
 }

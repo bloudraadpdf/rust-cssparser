@@ -74,7 +74,9 @@ pub use crate::macros::{
     _cssparser_internal_create_uninit_array, _cssparser_internal_to_lowercase,
 };
 pub use crate::nth::parse_nth;
-pub use crate::parser::{BasicParseError, BasicParseErrorKind, ParseError, ParseErrorKind};
+pub use crate::parser::{
+    BasicParseError, BasicParseErrorKind, ParseError, ParseErrorKind, MAX_NESTING_DEPTH,
+};
 pub use crate::parser::{Delimiter, Delimiters, Parser, ParserInput, ParserState};
 pub use crate::rules_and_declarations::{parse_important, parse_one_declaration};
 pub use crate::rules_and_declarations::{parse_one_rule, StyleSheetParser};

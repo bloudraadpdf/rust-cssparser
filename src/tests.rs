@@ -18,7 +18,7 @@ use super::{
     AtRuleParser, BasicParseError, BasicParseErrorKind, CowRcStr, DeclarationParser, Delimiter,
     EncodingSupport, ParseError, ParseErrorKind, Parser, ParserInput, ParserState,
     QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, SourceLocation, StyleSheetParser,
-    ToCss, Token, TokenSerializationType, UnicodeRange,
+    ToCss, Token, TokenSerializationType, UnicodeRange, MAX_NESTING_DEPTH,
 };
 
 macro_rules! JArray {
@@ -1434,4 +1434,29 @@ fn servo_define_css_keyword_enum() {
     }
 
     assert_eq!(UserZoom::from_ident("fixed"), Ok(UserZoom::Fixed));
+}
+
+fn nested_block_depth<'i>(parser: &mut Parser<'i, '_>) -> Result<usize, ParseError<'i, ()>> {
+    let mut depth = 0;
+    while let Ok(token) = parser.next() {
+        if matches!(token, Token::ParenthesisBlock) {
+            depth = depth.max(1 + parser.parse_nested_block(|nested| nested_block_depth(nested))?);
+        }
+    }
+    Ok(depth)
+}
+
+#[test]
+fn nesting_at_the_limit_parses_and_one_level_more_fails() {
+    let nested = |depth: usize| format!("{}x{}", "(".repeat(depth), ")".repeat(depth));
+    let at_limit = nested(MAX_NESTING_DEPTH);
+    let mut input = ParserInput::new(&at_limit);
+    assert_eq!(nested_block_depth(&mut Parser::new(&mut input)), Ok(MAX_NESTING_DEPTH));
+
+    let too_deep = nested(100_000);
+    let mut input = ParserInput::new(&too_deep);
+    let mut parser = Parser::new(&mut input);
+    let error = nested_block_depth(&mut parser).expect_err("the nesting exceeds the limit");
+    assert_eq!(error.kind, ParseErrorKind::Basic(BasicParseErrorKind::NestingTooDeep));
+    assert!(parser.is_exhausted());
 }
